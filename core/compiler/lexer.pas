@@ -18,7 +18,7 @@ type
     TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
     TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
     TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW,
-    TOK_CLASS, TOK_PUBLIC, TOK_PRIVATE
+    TOK_CLASS, TOK_PUBLIC, TOK_PRIVATE, TOK_TRY, TOK_FINALLY
   );
 
   TKeywordSet = array of string;
@@ -29,7 +29,7 @@ var
   Keywords: TKeywordSet = (
     'program', 'uses', 'var', 'proc', 'func', 'init', 'if', 'then', 'else', 'while',
     'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut', 'owner', 'borrow',
-    'class', 'public', 'private' 
+    'class', 'public', 'private', 'try', 'finally'
   );
 
   Operators: TOperatorSet = (
@@ -282,18 +282,18 @@ begin
       '\': Result := TToken.Create(TOK_BACKSLASH, '\', FCurrentReader.Line, FCurrentReader.Column);
       '`': Result := TToken.Create(TOK_BACKQUOTE, '`', FCurrentReader.Line, FCurrentReader.Column);
     end;
-    FCurrentReader.Read; // Consume the character
+    FCurrentReader.Read; 
   end
   else if FCurrentReader.Peek = '''' then
   begin
     lexeme := '';
-    FCurrentReader.Read; // Consume the opening quote
+    FCurrentReader.Read; 
     while (FCurrentReader.Peek <> '''') and (not FCurrentReader.IsEOF) do
     begin
       lexeme := lexeme + FCurrentReader.Read;
     end;
     if FCurrentReader.Peek = '''' then
-      FCurrentReader.Read; // Consume the closing quote
+      FCurrentReader.Read; 
     Result := TToken.Create(TOK_STRING, lexeme, FCurrentReader.Line, FCurrentReader.Column);
   end
   else if IsAlpha(FCurrentReader.Peek) then

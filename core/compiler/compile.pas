@@ -16,6 +16,7 @@ type
     procedure GenerateExprStmt(Node: TExprStmtNode);
     procedure GenerateVarDecl(Node: TVarDeclNode);
     procedure GenerateClassDecl(Node: TClassDeclNode);
+    procedure GenerateTryFinally(Node: TTryFinallyNode);
   public
     constructor Create;
     destructor Destroy; override;
@@ -68,7 +69,9 @@ begin
     else if Node.Statements[i] is TFuncDeclNode then
       GenerateFuncDecl(TFuncDeclNode(Node.Statements[i]))
     else if Node.Statements[i] is TClassDeclNode then
-      GenerateClassDecl(TClassDeclNode(Node.Statements[i])) // Add semicolon here
+      GenerateClassDecl(TClassDeclNode(Node.Statements[i]))
+    else if Node.Statements[i] is TTryFinallyNode then
+      GenerateTryFinally(TTryFinallyNode(Node.Statements[i])) 
     else if Node.Statements[i] is TExprStmtNode then
       GenerateExprStmt(TExprStmtNode(Node.Statements[i]));
   end;
@@ -79,14 +82,23 @@ procedure TCodeGenerator.GenerateProcDecl(Node: TProcDeclNode);
 begin
   FOutput.Add('procedure ' + Node.Name + '() {');
   GenerateBlock(Node.Body);
-  FOutput.Add('};'); // Add semicolon after closing brace
+  FOutput.Add('};'); 
 end;
 
 procedure TCodeGenerator.GenerateFuncDecl(Node: TFuncDeclNode);
 begin
   FOutput.Add('function ' + Node.Name + '() {');
   GenerateBlock(Node.Body);
-  FOutput.Add('};'); // Add semicolon after closing brace
+  FOutput.Add('};'); 
+end;
+
+procedure TCodeGenerator.GenerateTryFinally(Node: TTryFinallyNode);
+begin
+  FOutput.Add('try {');
+  GenerateBlock(Node.TryBlock);
+  FOutput.Add('} finally {');
+  GenerateBlock(Node.FinallyBlock);
+  FOutput.Add('};');
 end;
 
 procedure TCodeGenerator.GenerateExprStmt(Node: TExprStmtNode);
@@ -129,7 +141,7 @@ begin
     else if Node.Members[i] is TFuncDeclNode then
       GenerateFuncDecl(TFuncDeclNode(Node.Members[i]));
   end;
-  FOutput.Add('};'); // Add semicolon after closing brace
+  FOutput.Add('};'); 
 end;
 
 procedure TCodeGenerator.Generate(Node: TProgramNode);

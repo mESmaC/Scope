@@ -60,6 +60,12 @@ type
     constructor Create(AName: string; AArgs: TStringArray);
   end;
 
+  TTryFinallyNode = class(TASTNode)
+    TryBlock: TBlockNode;
+    FinallyBlock: TBlockNode;
+    constructor Create(ATryBlock, AFinallyBlock: TBlockNode);
+  end;
+
   TParser = class
   private
     FLexer: TLexer;
@@ -75,13 +81,21 @@ type
     function ParseVarDecl: TVarDeclNode;
     function ParseClassDecl: TClassDeclNode;
     function ParseMethodOrConstructor: TASTNode;
+    function ParseTryFinally: TTryFinallyNode; 
   public
     constructor Create(ALexer: TLexer);
     function Parse: TProgramNode;
     procedure AddFile(const AFilename: string);
   end;
 
+
 implementation
+
+constructor TTryFinallyNode.Create(ATryBlock, AFinallyBlock: TBlockNode);
+begin
+  TryBlock := ATryBlock;
+  FinallyBlock := AFinallyBlock;
+end;
 
 constructor TClassDeclNode.Create(AName, AVisibility: string; AMembers: TASTNodeArray);
 begin
@@ -197,7 +211,6 @@ begin
     end
     else if FCurrentToken.TokenType = TOK_IDENTIFIER then
     begin
-      // Handle constructor or method
       SetLength(Members, Length(Members) + 1);
       Members[High(Members)] := ParseMethodOrConstructor;
     end
@@ -206,7 +219,7 @@ begin
   end;
 
   Eat(TOK_RBRACE);
-  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+  Eat(TOK_SEMICOLON); 
   Result := TClassDeclNode.Create(ClassIdentifier, Visibility, Members);
 end;
 
@@ -218,18 +231,17 @@ begin
   Name := FCurrentToken.Lexeme;
   Eat(TOK_IDENTIFIER);
   Eat(TOK_LPAREN);
-  // Parse parameters if needed
   Eat(TOK_RPAREN);
   Eat(TOK_LBRACE);
   Body := ParseBlock;
   Eat(TOK_RBRACE);
-  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+  Eat(TOK_SEMICOLON); 
 
-  // Determine if it's a constructor or a method
+ 
   if Name = 'Create' then
-    Result := TProcDeclNode.Create(Name, Body) // Treat constructor as a procedure for simplicity
+    Result := TProcDeclNode.Create(Name, Body)
   else
-    Result := TProcDeclNode.Create(Name, Body); // Treat method as a procedure for simplicity
+    Result := TProcDeclNode.Create(Name, Body); 
 end;
 
 function TParser.ParseVarDecl: TVarDeclNode;
@@ -294,7 +306,7 @@ begin
   else
   begin
     WriteLn('No uses clause found.');
-    SetLength(UsedUnits, 0); // Initialize UsedUnits if no uses clause
+    SetLength(UsedUnits, 0); 
   end;
   
   WriteLn('Parsing block...');
@@ -356,10 +368,23 @@ begin
     TOK_PROC: Result := ParseProcDecl;
     TOK_FUNC: Result := ParseFuncDecl;
     TOK_IDENTIFIER: Result := ParseExprStmt;
-    TOK_PUBLIC, TOK_PRIVATE: Result := ParseClassDecl; // Add this line
+    TOK_PUBLIC, TOK_PRIVATE: Result := ParseClassDecl; 
+    TOK_TRY: Result := ParseTryFinally; 
   else
     raise Exception.Create('Syntax error: unexpected token');
   end;
+end;
+
+function TParser.ParseTryFinally: TTryFinallyNode;
+var
+  TryBlock, FinallyBlock: TBlockNode;
+begin
+  Eat(TOK_TRY);
+  TryBlock := ParseBlock;
+  Eat(TOK_FINALLY);
+  FinallyBlock := ParseBlock;
+  Eat(TOK_SEMICOLON); 
+  Result := TTryFinallyNode.Create(TryBlock, FinallyBlock);
 end;
 
 function TParser.ParseProcDecl: TProcDeclNode;
@@ -375,7 +400,7 @@ begin
   Eat(TOK_LBRACE);
   Body := ParseBlock;
   Eat(TOK_RBRACE);
-  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+  Eat(TOK_SEMICOLON); 
   Result := TProcDeclNode.Create(Name, Body);
 end;
 
@@ -392,7 +417,7 @@ begin
   Eat(TOK_LBRACE);
   Body := ParseBlock;
   Eat(TOK_RBRACE);
-  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+  Eat(TOK_SEMICOLON); 
   Result := TFuncDeclNode.Create(Name, Body);
 end;
 
@@ -409,7 +434,6 @@ begin
     Eat(TOK_LPAREN);
     SetLength(Args, 0);
     
-    // Handle string literals within the parentheses
     while FCurrentToken.TokenType <> TOK_RPAREN do
     begin
       if FCurrentToken.TokenType = TOK_STRING then

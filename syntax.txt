@@ -37,7 +37,15 @@ var
 */
 public class publicClass {
 
+    try {
+
+    } finally {
+
+    };
+
 };
+
+
 
 private class privateClass {
 
