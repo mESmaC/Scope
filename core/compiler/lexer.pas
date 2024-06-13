@@ -17,7 +17,7 @@ type
     TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
     TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
     TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
-    TOK_STRING, TOK_MUT, TOK_VAR
+    TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW // Add new token types
   );
 
   TKeywordSet = array of string;
@@ -27,7 +27,7 @@ type
 var
   Keywords: TKeywordSet = (
     'program', 'uses', 'var', 'proc', 'func', 'init', 'if', 'then', 'else', 'while',
-    'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut'
+    'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut', 'owner', 'borrow' // Add new keywords
   );
 
   Operators: TOperatorSet = (
@@ -42,7 +42,7 @@ var
   );
 
 const
-  EOF_MARKER = '}.'; 
+  EOF_MARKER = '}.';
 
 type
   TToken = class
@@ -305,6 +305,10 @@ begin
     begin
       if lexeme = 'mut' then
         Result := TToken.Create(TOK_MUT, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else if lexeme = 'owner' then
+        Result := TToken.Create(TOK_OWNER, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else if lexeme = 'borrow' then
+        Result := TToken.Create(TOK_BORROW, lexeme, FCurrentReader.Line, FCurrentReader.Column)
       else
         Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FCurrentReader.Line, FCurrentReader.Column);
     end
@@ -329,4 +333,5 @@ begin
 
   WriteLn('Generated token: ', Result.Lexeme, ' (', Ord(Result.TokenType), ') at line ', Result.Line, ', column ', Result.Column);
 end;
+
 end.

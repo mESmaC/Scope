@@ -14,12 +14,13 @@ type
     procedure GenerateProcDecl(Node: TProcDeclNode);
     procedure GenerateFuncDecl(Node: TFuncDeclNode);
     procedure GenerateExprStmt(Node: TExprStmtNode);
-    procedure GenerateVarDecl(Node: TVarDeclNode); // Add this line
+    procedure GenerateVarDecl(Node: TVarDeclNode);
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Generate(Node: TASTNode; const AOutputFile: string);
-  end;
+    procedure Generate(Node: TProgramNode);
+    procedure SaveToFile(const AFilename: string);
+end;
 
 constructor TCodeGenerator.Create;
 begin
@@ -32,134 +33,123 @@ begin
   inherited;
 end;
 
-procedure TCodeGenerator.Generate(Node: TASTNode; const AOutputFile: string);
-begin
-  if Node is TProgramNode then
-    GenerateProgram(TProgramNode(Node))
-  else
-    raise Exception.Create('Unknown AST node type');
-
-  FOutput.SaveToFile(AOutputFile);
-end;
-
 procedure TCodeGenerator.GenerateProgram(Node: TProgramNode);
 var
-  I: Integer;
+  i: integer;
 begin
   FOutput.Add('program ' + Node.Name + ';');
-  FOutput.Add('');
-
   if Length(Node.UsedUnits) > 0 then
   begin
     FOutput.Add('uses');
-    for I := 0 to High(Node.UsedUnits) do
+    for i := 0 to High(Node.UsedUnits) do
     begin
-      if I < High(Node.UsedUnits) then
-        FOutput.Add('  ' + Node.UsedUnits[I] + ',')
-      else
-        FOutput.Add('  ' + Node.UsedUnits[I] + ';');
+      if i > 0 then
+        FOutput.Add(', ');
+      FOutput.Add(Node.UsedUnits[i]);
     end;
-    FOutput.Add('');
+    FOutput.Add(';');
   end;
-
   GenerateBlock(TBlockNode(Node.Block));
   FOutput.Add('.');
 end;
 
-procedure TCodeGenerator.GenerateVarDecl(Node: TVarDeclNode);
-begin
-  if Node.IsMutable then
-    FOutput.Add('var ' + Node.Name + ': ' + Node.VarType + ';')
-  else
-    FOutput.Add('const ' + Node.Name + ': ' + Node.VarType + ';');
-end;
-
-
 procedure TCodeGenerator.GenerateBlock(Node: TBlockNode);
 var
-  I: Integer;
+  i: integer;
 begin
   FOutput.Add('begin');
-  for I := 0 to High(Node.Statements) do
+  for i := 0 to High(Node.Statements) do
   begin
-    if Node.Statements[I] is TVarDeclNode then
-      GenerateVarDecl(TVarDeclNode(Node.Statements[I]))
-    else if Node.Statements[I] is TProcDeclNode then
-      GenerateProcDecl(TProcDeclNode(Node.Statements[I]))
-    else if Node.Statements[I] is TFuncDeclNode then
-      GenerateFuncDecl(TFuncDeclNode(Node.Statements[I]))
-    else if Node.Statements[I] is TExprStmtNode then
-      GenerateExprStmt(TExprStmtNode(Node.Statements[I]))
-    else
-      raise Exception.Create('Unknown statement type');
+    if Node.Statements[i] is TVarDeclNode then
+      GenerateVarDecl(TVarDeclNode(Node.Statements[i]))
+    else if Node.Statements[i] is TProcDeclNode then
+      GenerateProcDecl(TProcDeclNode(Node.Statements[i]))
+    else if Node.Statements[i] is TFuncDeclNode then
+      GenerateFuncDecl(TFuncDeclNode(Node.Statements[i]))
+    else if Node.Statements[i] is TExprStmtNode then
+      GenerateExprStmt(TExprStmtNode(Node.Statements[i]));
   end;
-  FOutput.Add('end');
+  FOutput.Add('end;');
 end;
 
 procedure TCodeGenerator.GenerateProcDecl(Node: TProcDeclNode);
 begin
   FOutput.Add('procedure ' + Node.Name + ';');
   GenerateBlock(Node.Body);
-  FOutput.Add(';');
+  FOutput.Add('end;');
 end;
 
 procedure TCodeGenerator.GenerateFuncDecl(Node: TFuncDeclNode);
 begin
-  FOutput.Add('function ' + Node.Name + ': Integer;'); // Assuming return type is Integer for simplicity
+  FOutput.Add('function ' + Node.Name + ': integer;');
   GenerateBlock(Node.Body);
-  FOutput.Add(';');
+  FOutput.Add('end;');
 end;
 
 procedure TCodeGenerator.GenerateExprStmt(Node: TExprStmtNode);
 var
-  I: Integer;
+  i: integer;
 begin
   FOutput.Add(Node.Name + '(');
-  for I := 0 to High(Node.Args) do
+  for i := 0 to High(Node.Args) do
   begin
-    FOutput.Add('''' + Node.Args[I] + '''');
-    if I < High(Node.Args) then
+    if i > 0 then
       FOutput.Add(', ');
+    FOutput.Add(Node.Args[i]);
   end;
   FOutput.Add(');');
 end;
 
-var
-  MyLexer: TLexer;
-  MyParser: TParser;
-  CodeGenerator: TCodeGenerator;
-  AST: TProgramNode;
-  InputFileName: string;
-  OutputFileName: string;
+procedure TCodeGenerator.GenerateVarDecl(Node: TVarDeclNode);
 begin
-  if ParamCount < 1 then
+  if Node.IsMutable then
+    FOutput.Add('var mut ' + Node.Name + ': ' + Node.VarType + ';')
+  else if Node.IsOwner then
+    FOutput.Add('var owner ' + Node.Name + ': ' + Node.VarType + ';')
+  else if Node.IsBorrow then
+    FOutput.Add('var borrow ' + Node.Name + ': ' + Node.VarType + ';')
+  else
+    FOutput.Add('var ' + Node.Name + ': ' + Node.VarType + ';');
+end;
+
+procedure TCodeGenerator.Generate(Node: TProgramNode);
+begin
+  GenerateProgram(Node);
+end;
+
+procedure TCodeGenerator.SaveToFile(const AFilename: string);
+begin
+  FOutput.SaveToFile(AFilename);
+end;
+
+var
+  LexerInstance: TLexer;
+  ParserInstance: TParser;
+  CodeGen: TCodeGenerator;
+  ProgramNode: TProgramNode;
+begin
+  if ParamCount < 2 then
   begin
-    WriteLn('Usage: Compiler <inputfile> [outputfile]');
+    WriteLn('Usage: compile <inputfile> <outputfile>');
     Exit;
   end;
 
-  InputFileName := ParamStr(1);
-  if ParamCount > 1 then
-    OutputFileName := ParamStr(2)
-  else
-    OutputFileName := ChangeFileExt(InputFileName, '.pas');
-
-  MyLexer := TLexer.Create(InputFileName);
+  LexerInstance := TLexer.Create(ParamStr(1));
   try
-    MyParser := TParser.Create(MyLexer);
+    ParserInstance := TParser.Create(LexerInstance);
     try
-      AST := MyParser.Parse;
-      // Process the AST (e.g., interpret or compile it)
-      CodeGenerator := TCodeGenerator.Create;
+      ProgramNode := ParserInstance.Parse;
+      CodeGen := TCodeGenerator.Create;
       try
-        CodeGenerator.Generate(AST, OutputFileName);
+        CodeGen.Generate(ProgramNode);
+        CodeGen.SaveToFile(ParamStr(2));
       finally
-        CodeGenerator.Free;
+        CodeGen.Free;
       end;
     finally
-      MyParser.Free;
+      ParserInstance.Free;
     end;
   finally
-    MyLexer.Free;
+    LexerInstance.Free;
   end;
 end.

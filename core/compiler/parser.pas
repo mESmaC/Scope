@@ -14,12 +14,13 @@ type
   TStringArray = array of string;
   TASTNodeArray = array of TASTNode;
 
-
   TVarDeclNode = class(TASTNode)
     Name: string;
     VarType: string;
     IsMutable: boolean;
-    constructor Create(AName, AVarType: string; AMutable: boolean);
+    IsOwner: boolean;
+    IsBorrow: boolean;
+    constructor Create(AName, AVarType: string; AMutable, AOwner, ABorrow: boolean);
   end;
 
   TProgramNode = class(TASTNode)
@@ -64,7 +65,7 @@ type
     function ParseProcDecl: TProcDeclNode;
     function ParseFuncDecl: TFuncDeclNode;
     function ParseExprStmt: TExprStmtNode;
-    function ParseVarDecl: TVarDeclNode; // Add this declaration
+    function ParseVarDecl: TVarDeclNode;
   public
     constructor Create(ALexer: TLexer);
     function Parse: TProgramNode;
@@ -85,11 +86,13 @@ begin
   Statements := AStatements;
 end;
 
-constructor TVarDeclNode.Create(AName, AVarType: string; AMutable: boolean);
+constructor TVarDeclNode.Create(AName, AVarType: string; AMutable, AOwner, ABorrow: boolean);
 begin
   Name := AName;
   VarType := AVarType;
   IsMutable := AMutable;
+  IsOwner := AOwner;
+  IsBorrow := ABorrow;
 end;
 
 constructor TProcDeclNode.Create(AName: string; ABody: TBlockNode);
@@ -136,22 +139,37 @@ end;
 
 function TParser.ParseVarDecl: TVarDeclNode;
 var
-  IsMutable: boolean;
+  IsMutable, IsOwner, IsBorrow: boolean;
   VarName, VarType: string;
 begin
   IsMutable := False;
+  IsOwner := False;
+  IsBorrow := False;
+
   if FCurrentToken.TokenType = TOK_MUT then
   begin
     IsMutable := True;
     Eat(TOK_MUT);
   end;
+
+  if FCurrentToken.TokenType = TOK_OWNER then
+  begin
+    IsOwner := True;
+    Eat(TOK_OWNER);
+  end
+  else if FCurrentToken.TokenType = TOK_BORROW then
+  begin
+    IsBorrow := True;
+    Eat(TOK_BORROW);
+  end;
+
   VarName := FCurrentToken.Lexeme;
   Eat(TOK_IDENTIFIER);
   Eat(TOK_COLON);
   VarType := FCurrentToken.Lexeme;
   Eat(TOK_IDENTIFIER);
   Eat(TOK_SEMICOLON);
-  Result := TVarDeclNode.Create(VarName, VarType, IsMutable);
+  Result := TVarDeclNode.Create(VarName, VarType, IsMutable, IsOwner, IsBorrow);
 end;
 
 function TParser.ParseProgram: TProgramNode;
