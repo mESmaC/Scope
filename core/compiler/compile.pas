@@ -15,12 +15,13 @@ type
     procedure GenerateFuncDecl(Node: TFuncDeclNode);
     procedure GenerateExprStmt(Node: TExprStmtNode);
     procedure GenerateVarDecl(Node: TVarDeclNode);
+    procedure GenerateClassDecl(Node: TClassDeclNode);
   public
     constructor Create;
     destructor Destroy; override;
     procedure Generate(Node: TProgramNode);
     procedure SaveToFile(const AFilename: string);
-end;
+  end;
 
 constructor TCodeGenerator.Create;
 begin
@@ -66,6 +67,8 @@ begin
       GenerateProcDecl(TProcDeclNode(Node.Statements[i]))
     else if Node.Statements[i] is TFuncDeclNode then
       GenerateFuncDecl(TFuncDeclNode(Node.Statements[i]))
+    else if Node.Statements[i] is TClassDeclNode then
+      GenerateClassDecl(TClassDeclNode(Node.Statements[i])) // Add semicolon here
     else if Node.Statements[i] is TExprStmtNode then
       GenerateExprStmt(TExprStmtNode(Node.Statements[i]));
   end;
@@ -74,16 +77,16 @@ end;
 
 procedure TCodeGenerator.GenerateProcDecl(Node: TProcDeclNode);
 begin
-  FOutput.Add('procedure ' + Node.Name + ';');
+  FOutput.Add('procedure ' + Node.Name + '() {');
   GenerateBlock(Node.Body);
-  FOutput.Add('end;');
+  FOutput.Add('};'); // Add semicolon after closing brace
 end;
 
 procedure TCodeGenerator.GenerateFuncDecl(Node: TFuncDeclNode);
 begin
-  FOutput.Add('function ' + Node.Name + ': integer;');
+  FOutput.Add('function ' + Node.Name + '() {');
   GenerateBlock(Node.Body);
-  FOutput.Add('end;');
+  FOutput.Add('};'); // Add semicolon after closing brace
 end;
 
 procedure TCodeGenerator.GenerateExprStmt(Node: TExprStmtNode);
@@ -110,6 +113,23 @@ begin
     FOutput.Add('var borrow ' + Node.Name + ': ' + Node.VarType + ';')
   else
     FOutput.Add('var ' + Node.Name + ': ' + Node.VarType + ';');
+end;
+
+procedure TCodeGenerator.GenerateClassDecl(Node: TClassDeclNode);
+var
+  i: integer;
+begin
+  FOutput.Add(Node.Visibility + ' class ' + Node.Name + ' {');
+  for i := 0 to High(Node.Members) do
+  begin
+    if Node.Members[i] is TVarDeclNode then
+      GenerateVarDecl(TVarDeclNode(Node.Members[i]))
+    else if Node.Members[i] is TProcDeclNode then
+      GenerateProcDecl(TProcDeclNode(Node.Members[i]))
+    else if Node.Members[i] is TFuncDeclNode then
+      GenerateFuncDecl(TFuncDeclNode(Node.Members[i]));
+  end;
+  FOutput.Add('};'); // Add semicolon after closing brace
 end;
 
 procedure TCodeGenerator.Generate(Node: TProgramNode);

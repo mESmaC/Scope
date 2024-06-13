@@ -23,6 +23,13 @@ type
     constructor Create(AName, AVarType: string; AMutable, AOwner, ABorrow: boolean);
   end;
 
+  TClassDeclNode = class(TASTNode)
+    Name: string;
+    Visibility: string;
+    Members: TASTNodeArray;
+    constructor Create(AName, AVisibility: string; AMembers: TASTNodeArray);
+  end;
+
   TProgramNode = class(TASTNode)
     Name: string;
     UsedUnits: TStringArray;
@@ -66,6 +73,8 @@ type
     function ParseFuncDecl: TFuncDeclNode;
     function ParseExprStmt: TExprStmtNode;
     function ParseVarDecl: TVarDeclNode;
+    function ParseClassDecl: TClassDeclNode;
+    function ParseMethodOrConstructor: TASTNode;
   public
     constructor Create(ALexer: TLexer);
     function Parse: TProgramNode;
@@ -73,6 +82,13 @@ type
   end;
 
 implementation
+
+constructor TClassDeclNode.Create(AName, AVisibility: string; AMembers: TASTNodeArray);
+begin
+  Name := AName;
+  Visibility := AVisibility;
+  Members := AMembers;
+end;
 
 constructor TProgramNode.Create(AName: string; AUsedUnits: TStringArray; ABlock: TASTNode);
 begin
@@ -135,6 +151,85 @@ begin
        GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType)), 
        FCurrentToken.Line, FCurrentToken.Column]);
   end;
+end;
+
+function TParser.ParseClassDecl: TClassDeclNode;
+var
+  ClassIdentifier, Visibility: string;
+  Members: TASTNodeArray;
+begin
+  if FCurrentToken.TokenType = TOK_PUBLIC then
+  begin
+    Visibility := 'public';
+    Eat(TOK_PUBLIC);
+  end
+  else if FCurrentToken.TokenType = TOK_PRIVATE then
+  begin
+    Visibility := 'private';
+    Eat(TOK_PRIVATE);
+  end
+  else
+    raise Exception.Create('Syntax error: expected public or private');
+
+  Eat(TOK_CLASS);
+  ClassIdentifier := FCurrentToken.Lexeme;
+  Eat(TOK_IDENTIFIER);
+  Eat(TOK_LBRACE);
+
+  SetLength(Members, 0);
+  while FCurrentToken.TokenType <> TOK_RBRACE do
+  begin
+    if FCurrentToken.TokenType = TOK_VAR then
+    begin
+      Eat(TOK_VAR);
+      SetLength(Members, Length(Members) + 1);
+      Members[High(Members)] := ParseVarDecl;
+    end
+    else if FCurrentToken.TokenType = TOK_PROC then
+    begin
+      SetLength(Members, Length(Members) + 1);
+      Members[High(Members)] := ParseProcDecl;
+    end
+    else if FCurrentToken.TokenType = TOK_FUNC then
+    begin
+      SetLength(Members, Length(Members) + 1);
+      Members[High(Members)] := ParseFuncDecl;
+    end
+    else if FCurrentToken.TokenType = TOK_IDENTIFIER then
+    begin
+      // Handle constructor or method
+      SetLength(Members, Length(Members) + 1);
+      Members[High(Members)] := ParseMethodOrConstructor;
+    end
+    else
+      raise Exception.Create('Syntax error: unexpected token in class body');
+  end;
+
+  Eat(TOK_RBRACE);
+  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+  Result := TClassDeclNode.Create(ClassIdentifier, Visibility, Members);
+end;
+
+function TParser.ParseMethodOrConstructor: TASTNode;
+var
+  Name: string;
+  Body: TBlockNode;
+begin
+  Name := FCurrentToken.Lexeme;
+  Eat(TOK_IDENTIFIER);
+  Eat(TOK_LPAREN);
+  // Parse parameters if needed
+  Eat(TOK_RPAREN);
+  Eat(TOK_LBRACE);
+  Body := ParseBlock;
+  Eat(TOK_RBRACE);
+  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
+
+  // Determine if it's a constructor or a method
+  if Name = 'Create' then
+    Result := TProcDeclNode.Create(Name, Body) // Treat constructor as a procedure for simplicity
+  else
+    Result := TProcDeclNode.Create(Name, Body); // Treat method as a procedure for simplicity
 end;
 
 function TParser.ParseVarDecl: TVarDeclNode;
@@ -261,6 +356,7 @@ begin
     TOK_PROC: Result := ParseProcDecl;
     TOK_FUNC: Result := ParseFuncDecl;
     TOK_IDENTIFIER: Result := ParseExprStmt;
+    TOK_PUBLIC, TOK_PRIVATE: Result := ParseClassDecl; // Add this line
   else
     raise Exception.Create('Syntax error: unexpected token');
   end;
@@ -279,6 +375,7 @@ begin
   Eat(TOK_LBRACE);
   Body := ParseBlock;
   Eat(TOK_RBRACE);
+  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
   Result := TProcDeclNode.Create(Name, Body);
 end;
 
@@ -295,6 +392,7 @@ begin
   Eat(TOK_LBRACE);
   Body := ParseBlock;
   Eat(TOK_RBRACE);
+  Eat(TOK_SEMICOLON); // Expect semicolon after closing brace
   Result := TFuncDeclNode.Create(Name, Body);
 end;
 

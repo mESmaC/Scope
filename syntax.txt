@@ -31,6 +31,18 @@ var
     these are the only changes to the syntax.
 */
 
+
+/*
+    Class syntax is now more straightforward and more akin to c# or java.
+*/
+public class publicClass {
+
+};
+
+private class privateClass {
+
+};
+
 proc mainProcedure() {
 
 };

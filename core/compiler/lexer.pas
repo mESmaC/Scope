@@ -17,7 +17,8 @@ type
     TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
     TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
     TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
-    TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW // Add new token types
+    TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW,
+    TOK_CLASS, TOK_PUBLIC, TOK_PRIVATE
   );
 
   TKeywordSet = array of string;
@@ -27,7 +28,8 @@ type
 var
   Keywords: TKeywordSet = (
     'program', 'uses', 'var', 'proc', 'func', 'init', 'if', 'then', 'else', 'while',
-    'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut', 'owner', 'borrow' // Add new keywords
+    'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut', 'owner', 'borrow',
+    'class', 'public', 'private' 
   );
 
   Operators: TOperatorSet = (
@@ -309,6 +311,12 @@ begin
         Result := TToken.Create(TOK_OWNER, lexeme, FCurrentReader.Line, FCurrentReader.Column)
       else if lexeme = 'borrow' then
         Result := TToken.Create(TOK_BORROW, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else if lexeme = 'class' then
+        Result := TToken.Create(TOK_CLASS, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else if lexeme = 'public' then
+        Result := TToken.Create(TOK_PUBLIC, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else if lexeme = 'private' then
+        Result := TToken.Create(TOK_PRIVATE, lexeme, FCurrentReader.Line, FCurrentReader.Column)
       else
         Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FCurrentReader.Line, FCurrentReader.Column);
     end
