@@ -1,22 +1,29 @@
-program Parser;
+unit Parser;
+
+{$mode objfpc}{$H+}
+
+interface
 
 uses
-  SysUtils, Classes, Lexer;
+  SysUtils, Classes, Lexer, TypInfo;
 
 type
   TASTNode = class
   end;
 
+  TStringArray = array of string;
+  TASTNodeArray = array of TASTNode;
+
   TProgramNode = class(TASTNode)
     Name: string;
-    Uses: array of string;
+    UsedUnits: TStringArray;
     Block: TASTNode;
-    constructor Create(AName: string; AUses: array of string; ABlock: TASTNode);
+    constructor Create(AName: string; AUsedUnits: TStringArray; ABlock: TASTNode);
   end;
 
   TBlockNode = class(TASTNode)
-    Statements: array of TASTNode;
-    constructor Create(AStatements: array of TASTNode);
+    Statements: TASTNodeArray;
+    constructor Create(AStatements: TASTNodeArray);
   end;
 
   TProcDeclNode = class(TASTNode)
@@ -31,19 +38,40 @@ type
     constructor Create(AName: string; ABody: TBlockNode);
   end;
 
-  TExprStmtNode = class(TASTNode)
-    Name: string;
-    constructor Create(AName: string);
+TExprStmtNode = class(TASTNode)
+  Name: string;
+  Args: TStringArray;
+  constructor Create(AName: string; AArgs: TStringArray);
+end;
+
+  TParser = class
+  private
+    FLexer: TLexer;
+    FCurrentToken: TToken;
+    procedure Eat(ATokenType: TTokenType);
+    function ParseProgram: TProgramNode;
+    function ParseUsesClause: TStringArray;
+    function ParseBlock: TBlockNode;
+    function ParseStatement: TASTNode;
+    function ParseProcDecl: TProcDeclNode;
+    function ParseFuncDecl: TFuncDeclNode;
+    function ParseExprStmt: TExprStmtNode;
+  public
+    constructor Create(ALexer: TLexer);
+    function Parse: TProgramNode;
+    procedure AddFile(const AFilename: string);
   end;
 
-constructor TProgramNode.Create(AName: string; AUses: array of string; ABlock: TASTNode);
+implementation
+
+constructor TProgramNode.Create(AName: string; AUsedUnits: TStringArray; ABlock: TASTNode);
 begin
   Name := AName;
-  Uses := AUses;
+  UsedUnits := AUsedUnits;
   Block := ABlock;
 end;
 
-constructor TBlockNode.Create(AStatements: array of TASTNode);
+constructor TBlockNode.Create(AStatements: TASTNodeArray);
 begin
   Statements := AStatements;
 end;
@@ -60,63 +88,80 @@ begin
   Body := ABody;
 end;
 
-constructor TExprStmtNode.Create(AName: string);
+constructor TExprStmtNode.Create(AName: string; AArgs: TStringArray);
 begin
   Name := AName;
+  Args := AArgs;
 end;
-
-type
-  TParser = class
-  private
-    FLexer: TLexer;
-    FCurrentToken: TToken;
-    procedure Eat(ATokenType: TTokenType);
-    function ParseProgram: TProgramNode;
-    function ParseUsesClause: array of string;
-    function ParseBlock: TBlockNode;
-    function ParseStatement: TASTNode;
-    function ParseProcDecl: TProcDeclNode;
-    function ParseFuncDecl: TFuncDeclNode;
-    function ParseExprStmt: TExprStmtNode;
-  public
-    constructor Create(ALexer: TLexer);
-    function Parse: TProgramNode;
-  end;
 
 constructor TParser.Create(ALexer: TLexer);
 begin
   FLexer := ALexer;
   FCurrentToken := FLexer.GetNextToken;
+  WriteLn('Initial token: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
 end;
 
 procedure TParser.Eat(ATokenType: TTokenType);
 begin
+  WriteLn('Eating token: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
   if FCurrentToken.TokenType = ATokenType then
-    FCurrentToken := FLexer.GetNextToken
+  begin
+    FCurrentToken := FLexer.GetNextToken;
+    WriteLn('Next token: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  end
   else
-    raise Exception.CreateFmt('Syntax error: expected %s but found %s', [GetEnumName(TypeInfo(TTokenType), Ord(ATokenType)), FCurrentToken.Lexeme]);
+  begin
+    raise Exception.CreateFmt('Syntax error: expected %s but found %s at line %d, column %d', 
+      [GetEnumName(TypeInfo(TTokenType), Ord(ATokenType)), 
+       GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType)), 
+       FCurrentToken.Line, FCurrentToken.Column]);
+  end;
 end;
 
 function TParser.ParseProgram: TProgramNode;
 var
   Name: string;
-  Uses: array of string;
+  UsedUnits: TStringArray;
   Block: TBlockNode;
 begin
+  WriteLn('Parsing program...');
+  WriteLn('Current token: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  
   Eat(TOK_PROGRAM);
+  WriteLn('After TOK_PROGRAM: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  
   Name := FCurrentToken.Lexeme;
   Eat(TOK_IDENTIFIER);
+  WriteLn('After TOK_IDENTIFIER: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  
   Eat(TOK_SEMICOLON);
+  WriteLn('After TOK_SEMICOLON: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  
   if FCurrentToken.TokenType = TOK_USES then
-    Uses := ParseUsesClause;
+  begin
+    WriteLn('Parsing uses clause...');
+    UsedUnits := ParseUsesClause;
+  end
+  else
+  begin
+    WriteLn('No uses clause found.');
+    SetLength(UsedUnits, 0); // Initialize UsedUnits if no uses clause
+  end;
+  
+  WriteLn('Parsing block...');
   Block := ParseBlock;
+  WriteLn('After parsing block.');
+  
   Eat(TOK_DOT);
-  Result := TProgramNode.Create(Name, Uses, Block);
+  WriteLn('After TOK_DOT: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
+  
+  Result := TProgramNode.Create(Name, UsedUnits, Block);
+  WriteLn('Program node created.');
 end;
 
-function TParser.ParseUsesClause: array of string;
+function TParser.ParseUsesClause: TStringArray;
 var
-  UsesList: array of string;
+  UsesList: TStringArray;
 begin
   Eat(TOK_USES);
   SetLength(UsesList, 0);
@@ -133,7 +178,7 @@ end;
 
 function TParser.ParseBlock: TBlockNode;
 var
-  Statements: array of TASTNode;
+  Statements: TASTNodeArray;
   Statement: TASTNode;
 begin
   Eat(TOK_INIT);
@@ -151,6 +196,7 @@ end;
 
 function TParser.ParseStatement: TASTNode;
 begin
+  WriteLn('Parsing statement: ', FCurrentToken.Lexeme, ' (', Ord(FCurrentToken.TokenType), ')');
   case FCurrentToken.TokenType of
     TOK_PROC: Result := ParseProcDecl;
     TOK_FUNC: Result := ParseFuncDecl;
@@ -195,13 +241,34 @@ end;
 function TParser.ParseExprStmt: TExprStmtNode;
 var
   Name: string;
+  Args: TStringArray;
 begin
   Name := FCurrentToken.Lexeme;
   Eat(TOK_IDENTIFIER);
-  Eat(TOK_LPAREN);
-  Eat(TOK_RPAREN);
+  
+  if FCurrentToken.TokenType = TOK_LPAREN then
+  begin
+    Eat(TOK_LPAREN);
+    SetLength(Args, 0);
+    
+    // Handle string literals within the parentheses
+    while FCurrentToken.TokenType <> TOK_RPAREN do
+    begin
+      if FCurrentToken.TokenType = TOK_STRING then
+      begin
+        SetLength(Args, Length(Args) + 1);
+        Args[High(Args)] := FCurrentToken.Lexeme;
+        Eat(TOK_STRING);
+      end
+      else
+        raise Exception.Create('Syntax error: expected string literal');
+    end;
+    
+    Eat(TOK_RPAREN);
+  end;
+  
   Eat(TOK_SEMICOLON);
-  Result := TExprStmtNode.Create(Name);
+  Result := TExprStmtNode.Create(Name, Args);
 end;
 
 function TParser.Parse: TProgramNode;
@@ -209,6 +276,11 @@ begin
   Result := ParseProgram;
   if FCurrentToken.TokenType <> TOK_EOF then
     raise Exception.Create('Syntax error: unexpected token');
+end;
+
+procedure TParser.AddFile(const AFilename: string);
+begin
+  FLexer.AddFile(AFilename);
 end;
 
 end.

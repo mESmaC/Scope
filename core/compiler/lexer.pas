@@ -1,9 +1,11 @@
 unit Lexer;
 
+{$mode objfpc}{$H+}
+
 interface
 
 uses
-  SysUtils, Classes;
+  SysUtils, Classes, TypInfo;
 
 type
   TTokenType = (
@@ -14,32 +16,35 @@ type
     TOK_QUESTION, TOK_DOLLAR, TOK_AT, TOK_HASH,
     TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
     TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
-    TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM
+    TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
+    TOK_STRING
   );
 
-  TKeywordSet = set of string;
-  TOperatorSet = set of string;
-  TDelimiterSet = set of string;
+  TKeywordSet = array of string;
+  TOperatorSet = array of string;
+  TDelimiterSet = array of string;
 
-const
-  Keywords: TKeywordSet = [
+var
+  Keywords: TKeywordSet = (
     'program', 'uses', 'var', 'proc', 'func',
     'init', 'if', 'then', 'else', 'while',
     'do', 'for', 'to', 'integer', 'real',
-    'char', 'string', 'boolean', 'true', 'false',
-    'and', 'or', 'not'
-  ];
-  Operators: TOperatorSet = [
+    'char', 'string', 'boolean', 'true', 'false'
+  );
+
+  Operators: TOperatorSet = (
     ':=', '+', '-', '*', '/', '=',
     '<>', '<', '<=', '>', '>=',
-    'and', 'or', 'not'
-  ];
-  Delimiters: TDelimiterSet = [
+    'and', 'not', 'or'
+  );
+
+  Delimiters: TDelimiterSet = (
     '{', '}', '(', ')', ';',
     ':', ',', '.', '..'
-  ];
+  );
 
-  EOF_MARKER = '}.';
+const
+  EOF_MARKER = '}.'; 
 
 type
   TToken = class
@@ -70,18 +75,22 @@ type
 
   TLexer = class
   private
-    FReader: TReader;
+    FReaders: TList;
+    FCurrentReader: TReader;
     FCurrentToken: TToken;
+    procedure SwitchToNextReader;
   public
     constructor Create(AFilename: string);
     destructor Destroy; override;
     function GetNextToken: TToken;
     procedure Expect(ATokenType: TTokenType);
     function IsEOF: boolean;
+    procedure AddFile(const AFilename: string);
   end;
 
 function IsAlpha(ch: char): boolean;
 function IsAlphaNum(ch: char): boolean;
+function IsKeyword(const lexeme: string): boolean;
 
 implementation
 
@@ -117,6 +126,7 @@ begin
   end
   else
     Result := #0;
+  WriteLn('Peek: ', Result, ' (', Ord(Result), ') at line ', FLine, ', column ', FColumn);
 end;
 
 function TReader.Read: char;
@@ -132,6 +142,7 @@ begin
   end
   else
     Result := #0;
+  WriteLn('Read: ', Result, ' (', Ord(Result), ') at line ', FLine, ', column ', FColumn);
 end;
 
 function TReader.ReadIdentifier: string;
@@ -155,13 +166,38 @@ end;
 
 constructor TLexer.Create(AFilename: string);
 begin
-  FReader := TReader.Create(AFilename);
+  FReaders := TList.Create;
+  AddFile(AFilename);
 end;
 
 destructor TLexer.Destroy;
+var
+  I: Integer;
 begin
-  FReader.Free;
+  for I := 0 to FReaders.Count - 1 do
+    TReader(FReaders[I]).Free;
+  FReaders.Free;
   inherited;
+end;
+
+procedure TLexer.AddFile(const AFilename: string);
+begin
+  FReaders.Add(TReader.Create(AFilename));
+  if FReaders.Count = 1 then
+    FCurrentReader := TReader(FReaders[0]);
+end;
+
+procedure TLexer.SwitchToNextReader;
+begin
+  if FReaders.Count > 0 then
+  begin
+    TReader(FReaders[0]).Free;
+    FReaders.Delete(0);
+    if FReaders.Count > 0 then
+      FCurrentReader := TReader(FReaders[0])
+    else
+      FCurrentReader := nil;
+  end;
 end;
 
 function IsAlpha(ch: char): boolean;
@@ -174,80 +210,121 @@ begin
   Result := IsAlpha(ch) or (ch >= '0') and (ch <= '9');
 end;
 
+function IsKeyword(const lexeme: string): boolean;
+var
+  i: integer;
+begin
+  Result := False;
+  for i := Low(Keywords) to High(Keywords) do
+  begin
+    if Keywords[i] = lexeme then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
 function TLexer.GetNextToken: TToken;
 var
   lexeme: string;
 begin
-  while FReader.Peek in [' ', #9, #10, #13] do
-    FReader.Read;
+  while (FCurrentReader <> nil) and (FCurrentReader.Peek in [' ', #9, #10, #13]) do
+    FCurrentReader.Read;
 
-  if FReader.Peek in ['+', '-', '*', '/', '=', '<', '>', '(', ')', ';', ':', ',', '.'] then
+  if FCurrentReader = nil then
   begin
-    case FReader.Peek of
-      '+': Result := TToken.Create(TOK_PLUS, '+', FReader.Line, FReader.Column);
-      '-': Result := TToken.Create(TOK_MINUS, '-', FReader.Line, FReader.Column);
-      '*': Result := TToken.Create(TOK_MULTIPLY, '*', FReader.Line, FReader.Column);
-      '/': Result := TToken.Create(TOK_DIVIDE, '/', FReader.Line, FReader.Column);
-      '=': Result := TToken.Create(TOK_EQUAL, '=', FReader.Line, FReader.Column);
-      '<': Result := TToken.Create(TOK_LESS, '<', FReader.Line, FReader.Column);
-      '>': Result := TToken.Create(TOK_GREATER, '>', FReader.Line, FReader.Column);
-      '(': Result := TToken.Create(TOK_LPAREN, '(', FReader.Line, FReader.Column);
-      ')': Result := TToken.Create(TOK_RPAREN, ')', FReader.Line, FReader.Column);
-      ',': Result := TToken.Create(TOK_COMMA, ',', FReader.Line, FReader.Column);
-      '{': Result := TToken.Create(TOK_LBRACE, '{', FReader.Line, FReader.Column);
-      '}': Result := TToken.Create(TOK_RBRACE, '}', FReader.Line, FReader.Column);
-      '[': Result := TToken.Create(TOK_LBRACKET, '[', FReader.Line, FReader.Column);
-      ']': Result := TToken.Create(TOK_RBRACKET, ']', FReader.Line, FReader.Column);
-      '%': Result := TToken.Create(TOK_MOD, '%', FReader.Line, FReader.Column);
-      '&': Result := TToken.Create(TOK_AND, '&', FReader.Line, FReader.Column);
-      '|': Result := TToken.Create(TOK_OR, '|', FReader.Line, FReader.Column);
-      '^': Result := TToken.Create(TOK_XOR, '^', FReader.Line, FReader.Column);
-      '~': Result := TToken.Create(TOK_NOT, '~', FReader.Line, FReader.Column);
-      '?': Result := TToken.Create(TOK_QUESTION, '?', FReader.Line, FReader.Column);
-      '$': Result := TToken.Create(TOK_DOLLAR, '$', FReader.Line, FReader.Column);
-      '@': Result := TToken.Create(TOK_AT, '@', FReader.Line, FReader.Column);
-      '#': Result := TToken.Create(TOK_HASH, '#', FReader.Line, FReader.Column);
-      '\': Result := TToken.Create(TOK_BACKSLASH, '\', FReader.Line, FReader.Column);
-      '`': Result := TToken.Create(TOK_BACKQUOTE, '`', FReader.Line, FReader.Column);
+    Result := TToken.Create(TOK_EOF, '', 0, 0);
+    Exit;
+  end;
+
+  if FCurrentReader.Peek in ['+', '-', '*', '/', '=', '<', '>', '(', ')', ';', ':', ',', '.', '{', '}', '[', ']', '%', '&', '|', '^', '~', '?', '$', '@', '#', '\', '`'] then
+  begin
+    case FCurrentReader.Peek of
+      '+': Result := TToken.Create(TOK_PLUS, '+', FCurrentReader.Line, FCurrentReader.Column);
+      '-': Result := TToken.Create(TOK_MINUS, '-', FCurrentReader.Line, FCurrentReader.Column);
+      '*': Result := TToken.Create(TOK_MULTIPLY, '*', FCurrentReader.Line, FCurrentReader.Column);
+      '/': Result := TToken.Create(TOK_DIVIDE, '/', FCurrentReader.Line, FCurrentReader.Column);
+      '=': Result := TToken.Create(TOK_EQUAL, '=', FCurrentReader.Line, FCurrentReader.Column);
+      '<': Result := TToken.Create(TOK_LESS, '<', FCurrentReader.Line, FCurrentReader.Column);
+      '>': Result := TToken.Create(TOK_GREATER, '>', FCurrentReader.Line, FCurrentReader.Column);
+      '(': Result := TToken.Create(TOK_LPAREN, '(', FCurrentReader.Line, FCurrentReader.Column);
+      ')': Result := TToken.Create(TOK_RPAREN, ')', FCurrentReader.Line, FCurrentReader.Column);
+      ';': Result := TToken.Create(TOK_SEMICOLON, ';', FCurrentReader.Line, FCurrentReader.Column);
+      ':': Result := TToken.Create(TOK_COLON, ':', FCurrentReader.Line, FCurrentReader.Column);
+      ',': Result := TToken.Create(TOK_COMMA, ',', FCurrentReader.Line, FCurrentReader.Column);
+      '.': Result := TToken.Create(TOK_DOT, '.', FCurrentReader.Line, FCurrentReader.Column);
+      '{': Result := TToken.Create(TOK_LBRACE, '{', FCurrentReader.Line, FCurrentReader.Column);
+      '}': Result := TToken.Create(TOK_RBRACE, '}', FCurrentReader.Line, FCurrentReader.Column);
+      '[': Result := TToken.Create(TOK_LBRACKET, '[', FCurrentReader.Line, FCurrentReader.Column);
+      ']': Result := TToken.Create(TOK_RBRACKET, ']', FCurrentReader.Line, FCurrentReader.Column);
+      '%': Result := TToken.Create(TOK_MOD, '%', FCurrentReader.Line, FCurrentReader.Column);
+      '&': Result := TToken.Create(TOK_AND, '&', FCurrentReader.Line, FCurrentReader.Column);
+      '|': Result := TToken.Create(TOK_OR, '|', FCurrentReader.Line, FCurrentReader.Column);
+      '^': Result := TToken.Create(TOK_XOR, '^', FCurrentReader.Line, FCurrentReader.Column);
+      '~': Result := TToken.Create(TOK_NOT, '~', FCurrentReader.Line, FCurrentReader.Column);
+      '?': Result := TToken.Create(TOK_QUESTION, '?', FCurrentReader.Line, FCurrentReader.Column);
+      '$': Result := TToken.Create(TOK_DOLLAR, '$', FCurrentReader.Line, FCurrentReader.Column);
+      '@': Result := TToken.Create(TOK_AT, '@', FCurrentReader.Line, FCurrentReader.Column);
+      '#': Result := TToken.Create(TOK_HASH, '#', FCurrentReader.Line, FCurrentReader.Column);
+      '\': Result := TToken.Create(TOK_BACKSLASH, '\', FCurrentReader.Line, FCurrentReader.Column);
+      '`': Result := TToken.Create(TOK_BACKQUOTE, '`', FCurrentReader.Line, FCurrentReader.Column);
     end;
-    FReader.Read; // Consume the character
+    FCurrentReader.Read; // Consume the character
   end
-  else if IsAlpha(FReader.Peek) then
+else if FCurrentReader.Peek = '''' then
+begin
+  lexeme := '';
+  FCurrentReader.Read; // Consume the opening quote
+  while (FCurrentReader.Peek <> '''') and (not FCurrentReader.IsEOF) do
+  begin
+    lexeme := lexeme + FCurrentReader.Read;
+  end;
+  if FCurrentReader.Peek = '''' then
+    FCurrentReader.Read; // Consume the closing quote
+  Result := TToken.Create(TOK_STRING, lexeme, FCurrentReader.Line, FCurrentReader.Column);
+end
+  else if IsAlpha(FCurrentReader.Peek) then
   begin
     lexeme := '';
-    while IsAlphaNum(FReader.Peek) do
+    while IsAlphaNum(FCurrentReader.Peek) do
     begin
-      lexeme := lexeme + FReader.Peek;
-      FReader.Read;
+      lexeme := lexeme + FCurrentReader.Read;
     end;
-    if lexeme in Keywords then
-      Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FReader.Line, FReader.Column)
+    if IsKeyword(lexeme) then
+      Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FCurrentReader.Line, FCurrentReader.Column)
     else
-      Result := TToken.Create(TOK_IDENTIFIER, lexeme, FReader.Line, FReader.Column);
+      Result := TToken.Create(TOK_IDENTIFIER, lexeme, FCurrentReader.Line, FCurrentReader.Column);
   end
-    else if (FReader.Peek >= '0') and (FReader.Peek <= '9') then
+  else if (FCurrentReader.Peek >= '0') and (FCurrentReader.Peek <= '9') then
+  begin
+    lexeme := '';
+    while (FCurrentReader.Peek >= '0') and (FCurrentReader.Peek <= '9') do
     begin
-      lexeme := '';
-      while (FReader.Peek >= '0') and (FReader.Peek <= '9') do
-      begin
-        lexeme := lexeme + FReader.Peek;
-        FReader.Read;
-      end;
-      Result := TToken.Create(TOK_NUMBER, lexeme, FReader.Line, FReader.Column);
-    end
-    else if FReader.Peek = EOF_MARKER[1] then
-    begin
-      lexeme := '';
-      while (Length(lexeme) < Length(EOF_MARKER)) and (FReader.Peek = EOF_MARKER[Length(lexeme) + 1]) do
-      begin
-        lexeme := lexeme + FReader.Peek;
-        FReader.Read;
-      end;
-      if lexeme = EOF_MARKER then
-        Result := TToken.Create(TOK_EOF, lexeme, FReader.Line, FReader.Column)
-      else
-        raise Exception.Create('Invalid character sequence: ' + lexeme);
-    end
-    else
-      raise Exception.Create('Invalid character: ' + FReader.Peek);
+      lexeme := lexeme + FCurrentReader.Read;
+    end;
+    Result := TToken.Create(TOK_NUMBER, lexeme, FCurrentReader.Line, FCurrentReader.Column);
+  end
+  else if FCurrentReader.IsEOF then
+  begin
+    Result := TToken.Create(TOK_EOF, '', FCurrentReader.Line, FCurrentReader.Column);
+  end
+  else
+    raise Exception.Create('Invalid character: ' + FCurrentReader.Peek);
+  
+  WriteLn('Generated token: ', Result.Lexeme, ' (', Ord(Result.TokenType), ') at line ', Result.Line, ', column ', Result.Column);
 end;
+
+procedure TLexer.Expect(ATokenType: TTokenType);
+begin
+  if FCurrentToken.TokenType <> ATokenType then
+    raise Exception.CreateFmt('Expected token %s but found %s', [GetEnumName(TypeInfo(TTokenType), Ord(ATokenType)), GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType))]);
+  FCurrentToken := GetNextToken;
+end;
+
+function TLexer.IsEOF: boolean;
+begin
+  Result := (FCurrentReader = nil) or (FCurrentToken.TokenType = TOK_EOF);
+end;
+
+end.

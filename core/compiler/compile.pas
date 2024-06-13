@@ -1,5 +1,7 @@
 program Compiler;
 
+{$mode objfpc}{$H+}
+
 uses
   SysUtils, Classes, Lexer, Parser;
 
@@ -46,12 +48,15 @@ begin
   FOutput.Add('program ' + Node.Name + ';');
   FOutput.Add('');
 
-  if Length(Node.Uses) > 0 then
+  if Length(Node.UsedUnits) > 0 then
   begin
     FOutput.Add('uses');
-    for I := 0 to High(Node.Uses) do
+    for I := 0 to High(Node.UsedUnits) do
     begin
-      FOutput.Add('  ' + Node.Uses[I] + IfThen(I < High(Node.Uses), ',', ';'));
+      if I < High(Node.UsedUnits) then
+        FOutput.Add('  ' + Node.UsedUnits[I] + ',')
+      else
+        FOutput.Add('  ' + Node.UsedUnits[I] + ';');
     end;
     FOutput.Add('');
   end;
@@ -94,32 +99,55 @@ begin
 end;
 
 procedure TCodeGenerator.GenerateExprStmt(Node: TExprStmtNode);
+var
+  I: Integer;
 begin
-  FOutput.Add(Node.Name + '();');
+  FOutput.Add(Node.Name + '(');
+  for I := 0 to High(Node.Args) do
+  begin
+    FOutput.Add('''' + Node.Args[I] + '''');
+    if I < High(Node.Args) then
+      FOutput.Add(', ');
+  end;
+  FOutput.Add(');');
 end;
 
 var
-  Lexer: TLexer;
-  Parser: TParser;
+  MyLexer: TLexer;
+  MyParser: TParser;
   CodeGenerator: TCodeGenerator;
   AST: TProgramNode;
+  InputFileName: string;
+  OutputFileName: string;
 begin
-  Lexer := TLexer.Create('input.scp');
+  if ParamCount < 1 then
+  begin
+    WriteLn('Usage: Compiler <inputfile> [outputfile]');
+    Exit;
+  end;
+
+  InputFileName := ParamStr(1);
+  if ParamCount > 1 then
+    OutputFileName := ParamStr(2)
+  else
+    OutputFileName := ChangeFileExt(InputFileName, '.pas');
+
+  MyLexer := TLexer.Create(InputFileName);
   try
-    Parser := TParser.Create(Lexer);
+    MyParser := TParser.Create(MyLexer);
     try
-      AST := Parser.Parse;
+      AST := MyParser.Parse;
       // Process the AST (e.g., interpret or compile it)
       CodeGenerator := TCodeGenerator.Create;
       try
-        CodeGenerator.Generate(AST, 'output.pas');
+        CodeGenerator.Generate(AST, OutputFileName);
       finally
         CodeGenerator.Free;
       end;
     finally
-      Parser.Free;
+      MyParser.Free;
     end;
   finally
-    Lexer.Free;
+    MyLexer.Free;
   end;
 end.
