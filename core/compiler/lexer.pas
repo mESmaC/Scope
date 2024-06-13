@@ -8,18 +8,19 @@ uses
   SysUtils, Classes, TypInfo;
 
 type
-  TTokenType = (
-    TOK_EOF, TOK_PLUS, TOK_MINUS, TOK_MULTIPLY, TOK_DIVIDE,
-    TOK_EQUAL, TOK_LESS, TOK_GREATER, TOK_LPAREN, TOK_RPAREN,
-    TOK_COMMA, TOK_LBRACE, TOK_RBRACE, TOK_LBRACKET, TOK_RBRACKET,
-    TOK_MOD, TOK_AND, TOK_OR, TOK_XOR, TOK_NOT,
-    TOK_QUESTION, TOK_DOLLAR, TOK_AT, TOK_HASH,
-    TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
-    TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
-    TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
-    TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW,
-    TOK_CLASS, TOK_PUBLIC, TOK_PRIVATE, TOK_TRY, TOK_FINALLY
-  );
+TTokenType = (
+  TOK_EOF, TOK_PLUS, TOK_MINUS, TOK_MULTIPLY, TOK_DIVIDE,
+  TOK_EQUAL, TOK_LESS, TOK_GREATER, TOK_LPAREN, TOK_RPAREN,
+  TOK_COMMA, TOK_LBRACE, TOK_RBRACE, TOK_LBRACKET, TOK_RBRACKET,
+  TOK_MOD, TOK_AND, TOK_OR, TOK_XOR, TOK_NOT,
+  TOK_QUESTION, TOK_DOLLAR, TOK_AT, TOK_HASH,
+  TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
+  TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
+  TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
+  TOK_STRING, TOK_MUT, TOK_VAR, TOK_OWNER, TOK_BORROW,
+  TOK_CLASS, TOK_PUBLIC, TOK_PRIVATE, TOK_TRY, TOK_FINALLY,
+  TOK_COMMENT 
+);
 
   TKeywordSet = array of string;
   TOperatorSet = array of string;
@@ -65,6 +66,7 @@ type
     constructor Create(const AFilename: string);
     destructor Destroy; override;
     function Peek: char;
+    function PeekNext: char; 
     function Read: char;
     function ReadIdentifier: string;
     function ReadNumber: string;
@@ -232,6 +234,27 @@ begin
   end;
 end;
 
+function TReader.PeekNext: char;
+var
+  ch: char;
+begin
+  if FStream.Read(ch, 1) = 1 then
+  begin
+    if FStream.Read(ch, 1) = 1 then
+    begin
+      FStream.Seek(-2, soFromCurrent);
+      Result := ch;
+    end
+    else
+    begin
+      FStream.Seek(-1, soFromCurrent);
+      Result := #0;
+    end;
+  end
+  else
+    Result := #0;
+end;
+
 function TLexer.IsEOF: boolean;
 begin
   Result := (FCurrentReader = nil) or (FCurrentToken.TokenType = TOK_EOF);
@@ -256,7 +279,32 @@ begin
       '+': Result := TToken.Create(TOK_PLUS, '+', FCurrentReader.Line, FCurrentReader.Column);
       '-': Result := TToken.Create(TOK_MINUS, '-', FCurrentReader.Line, FCurrentReader.Column);
       '*': Result := TToken.Create(TOK_MULTIPLY, '*', FCurrentReader.Line, FCurrentReader.Column);
-      '/': Result := TToken.Create(TOK_DIVIDE, '/', FCurrentReader.Line, FCurrentReader.Column);
+      '/': 
+        begin
+          FCurrentReader.Read;
+          if FCurrentReader.Peek = '/' then
+          begin
+            while (FCurrentReader.Peek <> #10) and (not FCurrentReader.IsEOF) do
+              FCurrentReader.Read;
+            Result := GetNextToken; // Skip single-line comment and get the next token
+            Exit;
+          end
+          else if FCurrentReader.Peek = '*' then
+          begin
+            FCurrentReader.Read;
+            while not ((FCurrentReader.Peek = '*') and (FCurrentReader.PeekNext = '/')) and (not FCurrentReader.IsEOF) do
+              FCurrentReader.Read;
+            if not FCurrentReader.IsEOF then
+            begin
+              FCurrentReader.Read; // Read '*'
+              FCurrentReader.Read; // Read '/'
+            end;
+            Result := GetNextToken; // Skip multi-line comment and get the next token
+            Exit;
+          end
+          else
+            Result := TToken.Create(TOK_DIVIDE, '/', FCurrentReader.Line, FCurrentReader.Column);
+        end;
       '=': Result := TToken.Create(TOK_EQUAL, '=', FCurrentReader.Line, FCurrentReader.Column);
       '<': Result := TToken.Create(TOK_LESS, '<', FCurrentReader.Line, FCurrentReader.Column);
       '>': Result := TToken.Create(TOK_GREATER, '>', FCurrentReader.Line, FCurrentReader.Column);
@@ -338,7 +386,7 @@ begin
   end
   else
     raise Exception.Create('Invalid character: ' + FCurrentReader.Peek);
-
+  
   WriteLn('Generated token: ', Result.Lexeme, ' (', Ord(Result.TokenType), ') at line ', Result.Line, ', column ', Result.Column);
 end;
 

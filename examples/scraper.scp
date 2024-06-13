@@ -22,10 +22,10 @@ proc extractLinks(content: string) -> array of string {
             repeat
                 matches.append(re.Match[1]);
             until not re.ExecNext;
-        end;
-    finally
+        };
+    } finally {
         re.Free;
-    end;
+    };
     return matches;
 };
 
@@ -36,7 +36,7 @@ proc mainProcedure() {
     
     for link in matches {
         writeln(link);
-    }
+    };
 };
 
 init {
