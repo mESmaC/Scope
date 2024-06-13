@@ -1,0 +1,44 @@
+program main;
+
+uses
+    crt,
+    fphttpclient, // For HTTP requests
+    regexpr;      // For regular expressions
+
+var
+    mut url: string;
+    mut pageContent: string;
+    mut re: TRegExpr;
+    mut matches: array of string;
+
+proc fetchPage(url: string) -> string {
+    return TFPHTTPClient.SimpleGet(url);
+};
+
+proc extractLinks(content: string) -> array of string {
+    re := TRegExpr.Create('<a href="([^"]+)"');
+    try {
+        if re.Exec(content) then {
+            repeat
+                matches.append(re.Match[1]);
+            until not re.ExecNext;
+        end;
+    finally
+        re.Free;
+    end;
+    return matches;
+};
+
+proc mainProcedure() {
+    url := 'http://example.com';
+    pageContent := fetchPage(url);
+    matches := extractLinks(pageContent);
+    
+    for link in matches {
+        writeln(link);
+    }
+};
+
+init {
+    mainProcedure();
+}.
