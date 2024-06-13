@@ -1,0 +1,44 @@
+// the projects namespace will be the same as before
+
+program main;
+
+
+/* 
+    Comments are replaced with a more common style.
+
+    Imports are exactly the same as they are in pascal, i think they are already quite intuitive.
+*/
+uses 
+    crt,
+    WebScope;
+
+
+/*
+    variables and type syntax will remain the same. 
+
+    statements and loops will remain the same.
+
+    these are the only changes to the syntax.
+*/
+
+proc mainProcedure() {
+
+};
+
+func mainFunction() {
+
+};
+
+
+/* 
+    Replaces pascals outdated begin and end keywords.
+    Curly brackets are more internationally known and visually understood.
+    instead of having pascals main statement being begin and end, we now 
+    call init. 
+*/
+
+init {
+    mainProcedure();
+    mainFunction();
+}.
+
