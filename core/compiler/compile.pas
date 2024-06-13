@@ -14,6 +14,7 @@ type
     procedure GenerateProcDecl(Node: TProcDeclNode);
     procedure GenerateFuncDecl(Node: TFuncDeclNode);
     procedure GenerateExprStmt(Node: TExprStmtNode);
+    procedure GenerateVarDecl(Node: TVarDeclNode); // Add this line
   public
     constructor Create;
     destructor Destroy; override;
@@ -65,6 +66,15 @@ begin
   FOutput.Add('.');
 end;
 
+procedure TCodeGenerator.GenerateVarDecl(Node: TVarDeclNode);
+begin
+  if Node.IsMutable then
+    FOutput.Add('var ' + Node.Name + ': ' + Node.VarType + ';')
+  else
+    FOutput.Add('const ' + Node.Name + ': ' + Node.VarType + ';');
+end;
+
+
 procedure TCodeGenerator.GenerateBlock(Node: TBlockNode);
 var
   I: Integer;
@@ -72,7 +82,9 @@ begin
   FOutput.Add('begin');
   for I := 0 to High(Node.Statements) do
   begin
-    if Node.Statements[I] is TProcDeclNode then
+    if Node.Statements[I] is TVarDeclNode then
+      GenerateVarDecl(TVarDeclNode(Node.Statements[I]))
+    else if Node.Statements[I] is TProcDeclNode then
       GenerateProcDecl(TProcDeclNode(Node.Statements[I]))
     else if Node.Statements[I] is TFuncDeclNode then
       GenerateFuncDecl(TFuncDeclNode(Node.Statements[I]))

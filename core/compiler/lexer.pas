@@ -17,7 +17,7 @@ type
     TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
     TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
     TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM,
-    TOK_STRING
+    TOK_STRING, TOK_MUT, TOK_VAR
   );
 
   TKeywordSet = array of string;
@@ -26,10 +26,8 @@ type
 
 var
   Keywords: TKeywordSet = (
-    'program', 'uses', 'var', 'proc', 'func',
-    'init', 'if', 'then', 'else', 'while',
-    'do', 'for', 'to', 'integer', 'real',
-    'char', 'string', 'boolean', 'true', 'false'
+    'program', 'uses', 'var', 'proc', 'func', 'init', 'if', 'then', 'else', 'while',
+    'do', 'for', 'to', 'integer', 'real', 'char', 'string', 'boolean', 'true', 'false', 'mut'
   );
 
   Operators: TOperatorSet = (
@@ -187,6 +185,13 @@ begin
     FCurrentReader := TReader(FReaders[0]);
 end;
 
+procedure TLexer.Expect(ATokenType: TTokenType);
+begin
+  if FCurrentToken.TokenType <> ATokenType then
+    raise Exception.CreateFmt('Expected token %s but found %s', [GetEnumName(TypeInfo(TTokenType), Ord(ATokenType)), GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType))]);
+  FCurrentToken := GetNextToken;
+end;
+
 procedure TLexer.SwitchToNextReader;
 begin
   if FReaders.Count > 0 then
@@ -223,6 +228,11 @@ begin
       Exit;
     end;
   end;
+end;
+
+function TLexer.IsEOF: boolean;
+begin
+  Result := (FCurrentReader = nil) or (FCurrentToken.TokenType = TOK_EOF);
 end;
 
 function TLexer.GetNextToken: TToken;
@@ -272,18 +282,18 @@ begin
     end;
     FCurrentReader.Read; // Consume the character
   end
-else if FCurrentReader.Peek = '''' then
-begin
-  lexeme := '';
-  FCurrentReader.Read; // Consume the opening quote
-  while (FCurrentReader.Peek <> '''') and (not FCurrentReader.IsEOF) do
+  else if FCurrentReader.Peek = '''' then
   begin
-    lexeme := lexeme + FCurrentReader.Read;
-  end;
-  if FCurrentReader.Peek = '''' then
-    FCurrentReader.Read; // Consume the closing quote
-  Result := TToken.Create(TOK_STRING, lexeme, FCurrentReader.Line, FCurrentReader.Column);
-end
+    lexeme := '';
+    FCurrentReader.Read; // Consume the opening quote
+    while (FCurrentReader.Peek <> '''') and (not FCurrentReader.IsEOF) do
+    begin
+      lexeme := lexeme + FCurrentReader.Read;
+    end;
+    if FCurrentReader.Peek = '''' then
+      FCurrentReader.Read; // Consume the closing quote
+    Result := TToken.Create(TOK_STRING, lexeme, FCurrentReader.Line, FCurrentReader.Column);
+  end
   else if IsAlpha(FCurrentReader.Peek) then
   begin
     lexeme := '';
@@ -292,7 +302,12 @@ end
       lexeme := lexeme + FCurrentReader.Read;
     end;
     if IsKeyword(lexeme) then
-      Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FCurrentReader.Line, FCurrentReader.Column)
+    begin
+      if lexeme = 'mut' then
+        Result := TToken.Create(TOK_MUT, lexeme, FCurrentReader.Line, FCurrentReader.Column)
+      else
+        Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FCurrentReader.Line, FCurrentReader.Column);
+    end
     else
       Result := TToken.Create(TOK_IDENTIFIER, lexeme, FCurrentReader.Line, FCurrentReader.Column);
   end
@@ -311,20 +326,7 @@ end
   end
   else
     raise Exception.Create('Invalid character: ' + FCurrentReader.Peek);
-  
+
   WriteLn('Generated token: ', Result.Lexeme, ' (', Ord(Result.TokenType), ') at line ', Result.Line, ', column ', Result.Column);
 end;
-
-procedure TLexer.Expect(ATokenType: TTokenType);
-begin
-  if FCurrentToken.TokenType <> ATokenType then
-    raise Exception.CreateFmt('Expected token %s but found %s', [GetEnumName(TypeInfo(TTokenType), Ord(ATokenType)), GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType))]);
-  FCurrentToken := GetNextToken;
-end;
-
-function TLexer.IsEOF: boolean;
-begin
-  Result := (FCurrentReader = nil) or (FCurrentToken.TokenType = TOK_EOF);
-end;
-
 end.

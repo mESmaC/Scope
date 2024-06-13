@@ -14,6 +14,14 @@ type
   TStringArray = array of string;
   TASTNodeArray = array of TASTNode;
 
+
+  TVarDeclNode = class(TASTNode)
+    Name: string;
+    VarType: string;
+    IsMutable: boolean;
+    constructor Create(AName, AVarType: string; AMutable: boolean);
+  end;
+
   TProgramNode = class(TASTNode)
     Name: string;
     UsedUnits: TStringArray;
@@ -38,11 +46,11 @@ type
     constructor Create(AName: string; ABody: TBlockNode);
   end;
 
-TExprStmtNode = class(TASTNode)
-  Name: string;
-  Args: TStringArray;
-  constructor Create(AName: string; AArgs: TStringArray);
-end;
+  TExprStmtNode = class(TASTNode)
+    Name: string;
+    Args: TStringArray;
+    constructor Create(AName: string; AArgs: TStringArray);
+  end;
 
   TParser = class
   private
@@ -56,6 +64,7 @@ end;
     function ParseProcDecl: TProcDeclNode;
     function ParseFuncDecl: TFuncDeclNode;
     function ParseExprStmt: TExprStmtNode;
+    function ParseVarDecl: TVarDeclNode; // Add this declaration
   public
     constructor Create(ALexer: TLexer);
     function Parse: TProgramNode;
@@ -74,6 +83,13 @@ end;
 constructor TBlockNode.Create(AStatements: TASTNodeArray);
 begin
   Statements := AStatements;
+end;
+
+constructor TVarDeclNode.Create(AName, AVarType: string; AMutable: boolean);
+begin
+  Name := AName;
+  VarType := AVarType;
+  IsMutable := AMutable;
 end;
 
 constructor TProcDeclNode.Create(AName: string; ABody: TBlockNode);
@@ -116,6 +132,26 @@ begin
        GetEnumName(TypeInfo(TTokenType), Ord(FCurrentToken.TokenType)), 
        FCurrentToken.Line, FCurrentToken.Column]);
   end;
+end;
+
+function TParser.ParseVarDecl: TVarDeclNode;
+var
+  IsMutable: boolean;
+  VarName, VarType: string;
+begin
+  IsMutable := False;
+  if FCurrentToken.TokenType = TOK_MUT then
+  begin
+    IsMutable := True;
+    Eat(TOK_MUT);
+  end;
+  VarName := FCurrentToken.Lexeme;
+  Eat(TOK_IDENTIFIER);
+  Eat(TOK_COLON);
+  VarType := FCurrentToken.Lexeme;
+  Eat(TOK_IDENTIFIER);
+  Eat(TOK_SEMICOLON);
+  Result := TVarDeclNode.Create(VarName, VarType, IsMutable);
 end;
 
 function TParser.ParseProgram: TProgramNode;
@@ -186,7 +222,13 @@ begin
   SetLength(Statements, 0);
   while FCurrentToken.TokenType <> TOK_RBRACE do
   begin
-    Statement := ParseStatement;
+    if FCurrentToken.TokenType = TOK_VAR then
+    begin
+      Eat(TOK_VAR);
+      Statement := ParseVarDecl;
+    end
+    else
+      Statement := ParseStatement;
     SetLength(Statements, Length(Statements) + 1);
     Statements[High(Statements)] := Statement;
   end;

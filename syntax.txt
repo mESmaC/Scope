@@ -12,7 +12,14 @@ uses
     crt,
     WebScope;
 
+/*
+    All Variables are considered to be immutable unless otherwise specified.
+    you can use the mut keyword to make a variable mutable.
+*/
 
+var
+    mut name: string;
+    age: int;
 /*
     variables and type syntax will remain the same. 
 
