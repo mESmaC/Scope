@@ -1,4 +1,9 @@
-program Lexer;
+unit Lexer;
+
+interface
+
+uses
+  SysUtils, Classes;
 
 type
   TTokenType = (
@@ -7,7 +12,9 @@ type
     TOK_COMMA, TOK_LBRACE, TOK_RBRACE, TOK_LBRACKET, TOK_RBRACKET,
     TOK_MOD, TOK_AND, TOK_OR, TOK_XOR, TOK_NOT,
     TOK_QUESTION, TOK_DOLLAR, TOK_AT, TOK_HASH,
-    TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER
+    TOK_BACKSLASH, TOK_BACKQUOTE, TOK_IDENTIFIER, TOK_NUMBER,
+    TOK_SEMICOLON, TOK_COLON, TOK_DOT, TOK_ASSIGN,
+    TOK_INIT, TOK_PROC, TOK_FUNC, TOK_USES, TOK_PROGRAM
   );
 
   TKeywordSet = set of string;
@@ -44,7 +51,6 @@ type
     constructor Create(AType: TTokenType; ALexeme: string; ALine, AColumn: integer);
   end;
 
-type
   TReader = class
   private
     FStream: TFileStream;
@@ -61,6 +67,31 @@ type
     property Line: integer read FLine;
     property Column: integer read FColumn;
   end;
+
+  TLexer = class
+  private
+    FReader: TReader;
+    FCurrentToken: TToken;
+  public
+    constructor Create(AFilename: string);
+    destructor Destroy; override;
+    function GetNextToken: TToken;
+    procedure Expect(ATokenType: TTokenType);
+    function IsEOF: boolean;
+  end;
+
+function IsAlpha(ch: char): boolean;
+function IsAlphaNum(ch: char): boolean;
+
+implementation
+
+constructor TToken.Create(AType: TTokenType; ALexeme: string; ALine, AColumn: integer);
+begin
+  TokenType := AType;
+  Lexeme := ALexeme;
+  Line := ALine;
+  Column := AColumn;
+end;
 
 constructor TReader.Create(const AFilename: string);
 begin
@@ -122,28 +153,15 @@ begin
   Result := FStream.Position >= FStream.Size;
 end;
 
-  TLexer = class
-  private
-    FReader: TReader;
-    FCurrentToken: TToken;
-  public
-    constructor Create(AFilename: string);
-    function GetNextToken: TToken;
-    procedure Expect(ATokenType: TTokenType);
-    function IsEOF: boolean;
-  end;
-
-constructor TToken.Create(AType: TTokenType; ALexeme: string; ALine, AColumn: integer);
-begin
-  TokenType := AType;
-  Lexeme := ALexeme;
-  Line := ALine;
-  Column := AColumn;
-end;
-
 constructor TLexer.Create(AFilename: string);
 begin
   FReader := TReader.Create(AFilename);
+end;
+
+destructor TLexer.Destroy;
+begin
+  FReader.Free;
+  inherited;
 end;
 
 function IsAlpha(ch: char): boolean;
@@ -192,6 +210,7 @@ begin
       '\': Result := TToken.Create(TOK_BACKSLASH, '\', FReader.Line, FReader.Column);
       '`': Result := TToken.Create(TOK_BACKQUOTE, '`', FReader.Line, FReader.Column);
     end;
+    FReader.Read; // Consume the character
   end
   else if IsAlpha(FReader.Peek) then
   begin
@@ -202,37 +221,33 @@ begin
       FReader.Read;
     end;
     if lexeme in Keywords then
-      Result := TToken.Create(KeywordTokens[lexeme], lexeme, FReader.Line, FReader.Column)
+      Result := TToken.Create(TTokenType(GetEnumValue(TypeInfo(TTokenType), 'TOK_' + UpperCase(lexeme))), lexeme, FReader.Line, FReader.Column)
     else
       Result := TToken.Create(TOK_IDENTIFIER, lexeme, FReader.Line, FReader.Column);
   end
-  else if (FReader.Peek >= '0') and (FReader.Peek <= '9') then
-  begin
-    lexeme := '';
-    while (FReader.Peek >= '0') and (FReader.Peek <= '9') do
+    else if (FReader.Peek >= '0') and (FReader.Peek <= '9') then
     begin
-      lexeme := lexeme + FReader.Peek;
-      FReader.Read;
-    end;
-    Result := TToken.Create(TOK_NUMBER, lexeme, FReader.Line, FReader.Column);
-  end
-  else if FReader.Peek = EOF_MARKER then
-  begin
-    Result := TToken.Create(TOK_EOF, '', FReader.Line, FReader.Column);
-    FReader.Read;
-  end
-  else
-    raise Exception.Create('Invalid character: ' + FReader.Peek);
-end;
-end;
-
-constructor TLexer.Create(AFilename: string);
-begin
-  FReader := TReader.Create(AFilename);
-end;
-
-destructor TLexer.Destroy;
-begin
-  FReader.Free;
-  inherited;
+      lexeme := '';
+      while (FReader.Peek >= '0') and (FReader.Peek <= '9') do
+      begin
+        lexeme := lexeme + FReader.Peek;
+        FReader.Read;
+      end;
+      Result := TToken.Create(TOK_NUMBER, lexeme, FReader.Line, FReader.Column);
+    end
+    else if FReader.Peek = EOF_MARKER[1] then
+    begin
+      lexeme := '';
+      while (Length(lexeme) < Length(EOF_MARKER)) and (FReader.Peek = EOF_MARKER[Length(lexeme) + 1]) do
+      begin
+        lexeme := lexeme + FReader.Peek;
+        FReader.Read;
+      end;
+      if lexeme = EOF_MARKER then
+        Result := TToken.Create(TOK_EOF, lexeme, FReader.Line, FReader.Column)
+      else
+        raise Exception.Create('Invalid character sequence: ' + lexeme);
+    end
+    else
+      raise Exception.Create('Invalid character: ' + FReader.Peek);
 end;
