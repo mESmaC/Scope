@@ -225,3 +225,14 @@ begin
     raise Exception.Create('Invalid character: ' + FReader.Peek);
 end;
 end;
+
+constructor TLexer.Create(AFilename: string);
+begin
+  FReader := TReader.Create(AFilename);
+end;
+
+destructor TLexer.Destroy;
+begin
+  FReader.Free;
+  inherited;
+end;
